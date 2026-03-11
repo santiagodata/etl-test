@@ -1,0 +1,2 @@
+order_id,user_id,amount,currency,created_at,items,metadata,reject_reason
+JJ-1010,emp_002,60000,COP,2025-08-21T15:00:00Z,[],"{'source': 'bonos_express', 'promo': None}",items_vacio
