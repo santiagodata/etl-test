@@ -19,7 +19,7 @@ transforma los datos y genera salidas en formato Parquet particionado.
 
 ### 1. Clonar el repositorio
 ```bash
-git clone https://github.com/santiagodata/etl_test
+git clone https://github.com/santiagodata/etl-test
 cd etl-test
 ```
 
