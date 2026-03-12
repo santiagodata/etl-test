@@ -51,14 +51,13 @@ MSSQL_PASSWORD=JujuTest123!
 
 ### 5. (Opcional) Levantar SQL Server con Docker
 ```bash
-docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=JujuTest123!" \
-  -p 1433:1433 --name juju-sqlserver \
-  -d mcr.microsoft.com/mssql/server:2022-latest
+docker run -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=JujuTest123!" -p 1433:1433 --name juju-sqlserver -d mcr.microsoft.com/mssql/server:2022-latest
 
 # Inicializar base de datos
-Get-Content sql/init.sql | docker exec -i juju-sqlserver \
-  /opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P "JujuTest123!" -No
+Get-Content sql/init.sql | docker exec -i juju-sqlserver /opt/mssql-tools18/bin/sqlcmd -S localhost -U SA -P "JujuTest123!" -No
+
 ```
+
 
 ## Ejecución del ETL
 
