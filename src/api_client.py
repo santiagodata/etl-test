@@ -58,12 +58,17 @@ def fetch_orders(since: str = None, retries: int = 3) -> list[dict]:
     raise RuntimeError(f"No se pudo leer pedidos tras {retries} intentos")
 
 
-def save_raw(orders: list[dict], output_dir: Path = RAW_OUTPUT) -> Path:
+def save_raw(orders: list[dict], output_dir: Path = RAW_OUTPUT):
     """
     Guarda los pedidos originales en output/raw/ como JSON.
     Nombre de archivo: orders_YYYY-MM-DD.json
+    Si no hay pedidos, no crea el archivo para evitar JSONs vacios.
     Sobreescribe si ya existe (idempotencia).
     """
+    if not orders:
+        logger.info("Sin pedidos nuevos — no se genera archivo raw.")
+        return None
+
     output_dir.mkdir(parents=True, exist_ok=True)
     date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     output_path = output_dir / f"orders_{date_str}.json"

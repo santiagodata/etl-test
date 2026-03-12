@@ -1,75 +1,49 @@
-# Design Notes — JUJU ETL Pipeline
-
-## Stack elegido: pandas + DuckDB
-Se eligió pandas + DuckDB sobre PySpark por tres razones: (1) el volumen
-de datos de JUJU (bonos virtuales, ~185.000 usuarios) no justifica la
-sobrecarga operacional de un cluster Spark; (2) DuckDB permite ejecutar
-queries SQL analíticas directamente sobre Parquet sin infraestructura
-adicional; (3) el entorno local de desarrollo es Windows, donde PySpark
-requiere configuración adicional compleja. Para volúmenes mayores a 10M
-de registros diarios, se recomienda migrar a PySpark o AWS Glue.
-
-## Particionado
-Los archivos curated se escriben en Parquet particionado por
-`date=YYYY-MM-DD`, compatible con el comando `COPY` de Redshift:
-```
+# Notas de diseño — Pipeline ETL JUJU
+ 
+## Tecnologías elegidas: pandas + DuckDB
+Se eligió pandas + DuckDB sobre PySpark porque el volumen de JUJU (miles de pedidos diarios) no justifica la complejidad de un clúster Spark. DuckDB permite ejecutar consultas SQL complejas directamente sobre los datos en memoria y sobre archivos Parquet sin ningún servidor adicional. Para volúmenes superiores a 10 millones de filas por día se recomienda migrar a PySpark o AWS Glue.
+ 
+## Particionado y carga a Redshift
+Los archivos procesados se escriben en formato Parquet divididos por fecha (`date=YYYY-MM-DD`), lo que los hace compatibles con el comando `COPY` de Redshift:
+```sql
 COPY fact_order
 FROM 's3://juju-bucket/curated/fact_order/'
-IAM_ROLE 'arn:aws:iam::ACCOUNT:role/RedshiftS3Role'
+IAM_ROLE 'arn:aws:iam::ACCOUNT_ID:role/RedshiftS3Role'
 FORMAT AS PARQUET;
 ```
-Este esquema permite a Redshift hacer partition pruning y reduce el
-costo de cada carga incremental.
-
+Dividir por fecha permite que Redshift lea solo las particiones necesarias al filtrar por fecha, y que cada ejecución diaria solo escriba el día correspondiente sin tocar el histórico.
+ 
 ## Claves del modelo dimensional
-- `dim_user` y `dim_product` usan surrogate keys (`BIGINT IDENTITY`)
-  para desacoplar el modelo del sistema fuente.
-- `fact_order` usa clave primaria compuesta `(order_id, sku)` porque
-  la granularidad es línea de pedido, no pedido completo.
-- `DISTKEY(order_date)` en `fact_order` optimiza JOINs por fecha en
-  Redshift. `DISTSTYLE ALL` en dims evita movimiento de datos en JOINs.
-
+- `dim_user` y `dim_product`: claves artificiales (`BIGINT IDENTITY`) para desacoplar el modelo de la fuente. Tablas pequeñas con `DISTSTYLE ALL`: se replican en todos los nodos para evitar movimiento de datos al hacer consultas.
+- `fact_order`: clave primaria compuesta `(order_id, sku)` porque la granularidad es línea de pedido, no pedido completo. `DISTKEY(order_date)` y `SORTKEY(order_date, user_sk)` aceleran consultas por rango de fechas.
+ 
 ## Idempotencia
-Técnica: **delete-then-write por partición**. Antes de escribir cada
-partición `date=YYYY-MM-DD`, el job elimina la carpeta existente con
-`shutil.rmtree()` y la recrea. Ejecutar el job N veces produce siempre
-el mismo resultado en `output/curated/`.
-
-## Incrementalidad
-El job acepta `--since YYYY-MM-DD` para procesar solo pedidos desde
-esa fecha. Si no se pasa `--since`, usa el timestamp del último run
-guardado en `output/.last_run`. Esto permite ejecuciones diarias sin
-reprocesar histórico.
-
-## Registros malformados
-Dos categorías van a `output/rejected/rejected_YYYY-MM-DD.csv`:
-- `created_at` nulo: no se puede particionar ni ordenar temporalmente.
-- `items` vacío: sin líneas de pedido no hay hecho que registrar.
-Los registros con `items.price` nulo se mantienen con `price=0.0` y
-se documentan en logs como advertencia (comportamiento configurable).
-
-## Monitorización y alertas en producción
-**Logs**: estructurados con `logging` de Python, formato
-`timestamp [LEVEL] módulo - mensaje`. En producción se enviarían a
-CloudWatch Logs o Datadog.
-
-**Métricas clave por ejecución**:
-- `pedidos_recibidos`: total de la API
-- `pedidos_validos` / `pedidos_rechazados`: calidad del dato
-- `tasa_rechazo`: alerta si supera el 5%
-- `duracion_segundos`: alerta si supera umbral (ej. 5 min)
-- `filas_fact_order`: alerta si cae a 0 inesperadamente
-
-**Alertas recomendadas** (AWS CloudWatch / PagerDuty):
-- `tasa_rechazo > 5%` → revisar fuente de datos
-- `job_status = FAILED` → reintentar con backoff, notificar on-call
-- `filas_escritas = 0` → posible problema en API mock o filtro
-
-**Recuperación**: el job es idempotente, por lo que ante cualquier
-fallo se puede relanzar sin riesgo de duplicados.
-
-## Fuentes de datos
-- **API mock**: `sample_data/api_orders.json` simula `/api/v1/orders`
-- **CSV**: `sample_data/users.csv` y `products.csv` (fuente principal)
-- **MSSQL (Docker)**: disponible con flag `--use-mssql`, útil para
-  integración con sistemas legacy de JUJU
+Técnica: **borrar y reescribir por partición** — antes de escribir cada carpeta `date=YYYY-MM-DD`, el proceso elimina la carpeta existente con `shutil.rmtree()` y la recrea. Ejecutar el proceso N veces con los mismos datos produce siempre el mismo resultado, sin duplicar registros.
+ 
+## Registros con errores
+- `created_at` nulo → rechazado: sin fecha no se puede dividir por partición.
+- `items` vacío → rechazado: sin líneas de pedido no hay nada que registrar.
+- `items.price` nulo → se reemplaza por `0.0` y se anota una advertencia en los registros de ejecución.
+- `metadata` nulo → se conserva el pedido, el campo se ignora.
+ 
+## Seguimiento en producción
+**Registros de ejecución**: formato estructurado con el módulo `logging` de Python; en producción se envían a CloudWatch Logs o Datadog.
+ 
+**Métricas mínimas por ejecución**:
+ 
+| Métrica | Alerta |
+|---|---|
+| Tasa de rechazo | Advertencia si supera el 5% |
+| Filas en `fact_order` | Crítico si es 0 |
+| Duración total | Advertencia si supera 300 segundos |
+| Estado del proceso | Crítico si termina con error |
+ 
+**Recuperación**: al ser idempotente, ante cualquier fallo basta con volver a ejecutar con el mismo `--since` sin riesgo de duplicar datos.
+ 
+## Decisiones de diseño
+| Decisión tomada | Opción descartada | Motivo |
+|---|---|---|
+| Borrar y reescribir por partición | Actualizar registro por registro | Más simple e igualmente correcto |
+| Parquet dividido por fecha | CSV plano | Formato nativo de Redshift, entre 3 y 10 veces más eficiente en lectura |
+| LEFT JOIN en `fact_order` | INNER JOIN | Conserva pedidos sin usuario registrado para auditoría |
+| Archivo `.last_run` en disco | Tabla de control en base de datos | Suficiente para ejecución local; en producción se reemplaza por una tabla de auditoría en Redshift |

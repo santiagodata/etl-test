@@ -3,9 +3,17 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-output/raw/
-output/curated/
-output/rejected/
+
+output/raw/*
+output/curated/*
+output/rejected/*
+!output/raw/.gitkeep
+!output/curated/.gitkeep
+!output/rejected/.gitkeep
+!output/raw/orders_*.json
+!output/curated/**
+!output/rejected/rejected_*.csv
+!output/.last_run
 .pytest_cache/
 *.egg-info/
 dist/
@@ -14,5 +22,3 @@ dist/
 .idea/
 .venv/
 main.py
-
-

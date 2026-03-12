@@ -79,7 +79,10 @@ def test_deduplicate_orders_elimina_duplicados(sample_orders):
 
 def test_deduplicate_orders_conserva_ultimo(sample_orders):
     result = deduplicate_orders(sample_orders)
-    assert result["order_id"].tolist() == ["JJ-1001", "JJ-1002"]
+    # Verifica que ambos IDs están presentes sin asumir orden (SQL no garantiza orden sin ORDER BY)
+    assert set(result["order_id"].tolist()) == {"JJ-1001", "JJ-1002"}
+    # Verifica que JJ-1002 aparece exactamente una vez (el duplicado fue eliminado)
+    assert result[result["order_id"] == "JJ-1002"].shape[0] == 1
 
 
 def test_deduplicate_orders_sin_duplicados():
