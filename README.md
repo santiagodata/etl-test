@@ -300,16 +300,16 @@ FORMAT AS PARQUET;
 
 ## Tiempo de desarrollo
 
-**Total: Apximadamente 7 horas. Distribuidas de la siguiente manera**
+**Total: Aproximadamente 7 horas. Distribuidas de la siguiente manera**
 
-| Fase | Tiempo |
-|---|--------|
+| Fase                            | Tiempo |
+|---------------------------------|--------|
 | Configuración y datos de prueba | 1h     |
-| Código del proceso ETL | 2:30h  |
-| SQL (tablas y consultas) | 45 min |
-| Pruebas automáticas | 1h     |
-| Documentación | 1:45 h |
-
+| Código del proceso ETL          | 2:30h  |
+| SQL (tablas y consultas)        | 45 min |
+| Pruebas automáticas             | 1h     |
+| Documentación                   | 1 h    |
+| Dashboard Basico en Power BI    | 45 min |
 ---
 
 ## Supuestos y limitaciones
@@ -320,3 +320,20 @@ FORMAT AS PARQUET;
 - El campo `created_at` de los pedidos debe venir en formato exacto `YYYY-MM-DDTHH:MM:SSZ`. Formatos con milisegundos o con zona horaria diferente a UTC (`+05:00`) no son compatibles con el filtro `--since` y el pedido sería omitido.
 - Los pedidos sin `created_at` se excluyen del filtro `--since` antes de llegar a la validación. Esto significa que no aparecen ni en `curated/` ni en `rejected/` si se usan en combinación con `--since`. Sin `--since` sí llegan a la validación y son rechazados normalmente.
 - La tabla `dbo.orders_db` que existe en `init.sql` no es usada por el proceso. Los pedidos siempre se leen desde `sample_data/api_orders.json`, independientemente de si se usa `--use-mssql` o no.
+
+## Decisiones fuera de lo solicitado
+
+| Decisión | Justificación |
+|---|---|
+| SQL Server real en Docker (bonus) | Mayor fidelidad con producción vs SQLite |
+| Flag `--use-mssql` | Permite alternar entre CSV y MSSQL sin cambiar código |
+| Alerta automática si rechazo > 5% | Buena práctica de observabilidad no solicitada explícitamente |
+| 12 tests en lugar del mínimo | Cobertura completa: dedup, validación, flatten, mock API e idempotencia |
+| Dashboard Power BI (bonus) | Visualización de ventas de bonos por fecha, categoría y producto |
+| DuckDB usado activamente en transformaciones | Dedup con QUALIFY ROW_NUMBER(), validación, JOINs y queries analíticas — no solo instalado como dependencia |
+| Moneda COP en lugar de USD | JUJU opera en Colombia con bonos en pesos colombianos — USD no es representativo del negocio real |
+| IDs tipo `JJ-1001` en lugar de `o_1001` | Formato más legible e identificable como prefijo JUJU |
+| IDs de usuarios tipo `emp_001` en lugar de `u_1` | Representa empresas clientes (empleadores) que es el modelo de negocio de JUJU |
+| Empresas colombianas reales como clientes | Éxito, Falabella, Homecenter, Rappi — clientes típicos del mercado de bonos corporativos en Colombia |
+| Categorías de bonos en español | Alineado con el mercado colombiano: "Almacenes de Cadena", "Moda y Hogar", etc. |
+| SKUs tipo `BONO-EXITO-50K` en lugar de `p_1` | Más descriptivos y representativos del catálogo real de bonos JUJU |
