@@ -337,3 +337,9 @@ FORMAT AS PARQUET;
 | Empresas colombianas reales como clientes | Éxito, Falabella, Homecenter, Rappi — clientes típicos del mercado de bonos corporativos en Colombia |
 | Categorías de bonos en español | Alineado con el mercado colombiano: "Almacenes de Cadena", "Moda y Hogar", etc. |
 | SKUs tipo `BONO-EXITO-50K` en lugar de `p_1` | Más descriptivos y representativos del catálogo real de bonos JUJU |
+
+## Dashboard Basico en Power BI (bonus)
+
+Visualización de ventas de bonos JUJU construida sobre los archivos Parquet generados por el pipeline.
+
+![Dashboard JUJU](docs/dashboard.png)
